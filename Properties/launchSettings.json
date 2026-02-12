@@ -1,0 +1,10 @@
+{
+  "profiles": {
+    "Clipora (Package)": {
+      "commandName": "MsixPackage"
+    },
+    "Clipora (Unpackaged)": {
+      "commandName": "Project"
+    }
+  }
+}
