@@ -1,0 +1,2 @@
+# clipora
+Lite clipboard manager.
