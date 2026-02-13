@@ -9,7 +9,7 @@
   <Identity
     Name="20715EerieGoesD.61367B263A33A"
     Publisher="CN=eerie"
-    Version="1.0.16.0" />
+    Version="1.1.22.0" />
 
   <Properties>
     <DisplayName>Clipora</DisplayName>
@@ -39,6 +39,7 @@
         <uap:DefaultTile Wide310x150Logo="Images\Wide310x150Logo.png"  ShortName="Clipora" Square71x71Logo="Images\SmallTile.png" Square310x310Logo="Images\LargeTile.png">
         </uap:DefaultTile >
         <uap:SplashScreen Image="Images\SplashScreen.png" />
+        <uap:LockScreen Notification="badgeAndTileText" BadgeLogo="Images\BadgeLogo.png"/>
       </uap:VisualElements>
     </Application>
   </Applications>

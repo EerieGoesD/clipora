@@ -1,4 +1,4 @@
-<Project Sdk="Microsoft.NET.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk">
 	<PropertyGroup>
 		<OutputType>WinExe</OutputType>
 		<TargetFramework>net8.0-windows10.0.19041.0</TargetFramework>
@@ -9,6 +9,9 @@
 		<WinUISDKReferences>false</WinUISDKReferences>
 		<EnableMsixTooling>false</EnableMsixTooling>
 		<Nullable>enable</Nullable>
+		<WindowsAppSDKSelfContained>false</WindowsAppSDKSelfContained>
+		<SelfContained>false</SelfContained>
+		<CopyLocalLockFileAssemblies>false</CopyLocalLockFileAssemblies>
 
 		<Platforms>AnyCPU;x64;ARM64</Platforms>
 		<PlatformTarget>AnyCPU</PlatformTarget>
@@ -53,5 +56,15 @@
 	<PropertyGroup>
 		<PublishReadyToRun Condition="'$(Configuration)' != 'Debug'">True</PublishReadyToRun>
 		<PublishTrimmed>false</PublishTrimmed>
+	</PropertyGroup>
+
+	<ItemGroup>
+		<None Remove="Clipora.Package\**" />
+		<Content Remove="Clipora.Package\**" />
+		<EmbeddedResource Remove="Clipora.Package\**" />
+	</ItemGroup>
+
+	<PropertyGroup>
+		<DefaultItemExcludes>$(DefaultItemExcludes);Clipora.Package\**</DefaultItemExcludes>
 	</PropertyGroup>
 </Project>
