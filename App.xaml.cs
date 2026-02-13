@@ -22,8 +22,7 @@ namespace Clipora
             var hWnd = WinRT.Interop.WindowNative.GetWindowHandle(m_window);
 
             var iconPath = System.IO.Path.Combine(
-                Package.Current.InstalledLocation.Path,
-                "Clipora",
+                AppContext.BaseDirectory,
                 "Assets",
                 "icon.ico");
 
