@@ -131,8 +131,9 @@ namespace Clipora
 
             var grid = new Grid();
             grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto }); // copy
+            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto }); // edit
+            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto }); // delete
 
             var textBlock = new TextBlock
             {
@@ -156,8 +157,25 @@ namespace Clipora
                 BorderThickness = new Thickness(0),
                 CornerRadius = new CornerRadius(6)
             };
-            copyButton.Click += (s, e) => CopyToClipboard(text, copyButton);
+            // IMPORTANT: copy the current value from Tag, not the original captured "text"
+            copyButton.Click += (s, e) =>
+                CopyToClipboard(snippetBorder.Tag as string ?? "", copyButton);
             Grid.SetColumn(copyButton, 1);
+
+            var editButton = new Button
+            {
+                Content = "✏️",
+                FontSize = 16,
+                Width = 36,
+                Height = 36,
+                Margin = new Thickness(4, 0, 4, 0),
+                Background = new Microsoft.UI.Xaml.Media.SolidColorBrush(Color.FromArgb(255, 100, 100, 100)),
+                Foreground = new Microsoft.UI.Xaml.Media.SolidColorBrush(Color.FromArgb(255, 255, 255, 255)),
+                BorderThickness = new Thickness(0),
+                CornerRadius = new CornerRadius(6)
+            };
+            editButton.Click += (s, e) => EditSnippet(snippetBorder, textBlock);
+            Grid.SetColumn(editButton, 2);
 
             var deleteButton = new Button
             {
@@ -165,22 +183,23 @@ namespace Clipora
                 FontSize = 16,
                 Width = 36,
                 Height = 36,
+                Margin = new Thickness(4, 0, 4, 0),
                 Background = new Microsoft.UI.Xaml.Media.SolidColorBrush(Color.FromArgb(255, 185, 28, 28)),
                 Foreground = new Microsoft.UI.Xaml.Media.SolidColorBrush(Color.FromArgb(255, 255, 255, 255)),
                 BorderThickness = new Thickness(0),
                 CornerRadius = new CornerRadius(6)
             };
             deleteButton.Click += (s, e) => DeleteSnippet(snippetBorder);
-            Grid.SetColumn(deleteButton, 2);
+            Grid.SetColumn(deleteButton, 3);
 
             grid.Children.Add(textBlock);
             grid.Children.Add(copyButton);
+            grid.Children.Add(editButton);
             grid.Children.Add(deleteButton);
 
             snippetBorder.Child = grid;
             SnippetsPanel.Children.Add(snippetBorder);
         }
-
         private async void CopyToClipboard(string text, Button button)
         {
             var dataPackage = new DataPackage();
@@ -201,6 +220,42 @@ namespace Clipora
         {
             SnippetsPanel.Children.Remove(snippet);
             SaveSnippets();
+        }
+
+        private async void EditSnippet(Border snippetBorder, TextBlock textBlock)
+        {
+            var currentText = snippetBorder.Tag as string ?? "";
+
+            var dialog = new ContentDialog
+            {
+                Title = "Edit Snippet",
+                PrimaryButtonText = "Save",
+                CloseButtonText = "Cancel",
+                DefaultButton = ContentDialogButton.Primary,
+                XamlRoot = Content.XamlRoot
+            };
+
+            var textBox = new TextBox
+            {
+                Text = currentText,
+                AcceptsReturn = true,
+                TextWrapping = TextWrapping.Wrap,
+                Height = 120,
+                Margin = new Thickness(0, 8, 0, 0)
+            };
+
+            dialog.Content = textBox;
+
+            var result = await dialog.ShowAsync();
+
+            if (result == ContentDialogResult.Primary && !string.IsNullOrWhiteSpace(textBox.Text))
+            {
+                // Update UI + stored value
+                textBlock.Text = textBox.Text;
+                snippetBorder.Tag = textBox.Text;
+
+                SaveSnippets();
+            }
         }
 
         private async void AddButton_Click(object sender, RoutedEventArgs e)
