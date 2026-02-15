@@ -18,24 +18,32 @@
         <!-- Header -->
         <Border Grid.Row="0" Background="#2D2D30" BorderBrush="#3F3F46" BorderThickness="0,0,0,1" Padding="16,12">
             <Grid>
-                <TextBlock Text="📋 Clipboard Manager" 
-                          FontSize="18" 
-                          FontWeight="SemiBold" 
-                          Foreground="#FFFFFF"
-                          VerticalAlignment="Center"/>
+                <StackPanel Orientation="Vertical" VerticalAlignment="Center">
+                    <TextBlock Text="📋 Clipora"
+                               FontSize="18"
+                               FontWeight="SemiBold"
+                               Foreground="#FFFFFF"/>
+
+                    <TextBlock Text="(Clipboard Manager)"
+                               FontSize="10"
+                               FontWeight="Normal"
+                               Foreground="#BFBFBF"
+                               Margin="0,2,0,0"/>
+                </StackPanel>
+
                 <Button x:Name="AddButton"
-                       Content="＋"
-                       Click="AddButton_Click"
-                       HorizontalAlignment="Right"
-                       Background="#0E7490"
-                       Foreground="White"
-                       FontSize="20"
-                       FontWeight="Bold"
-                       Width="40"
-                       Height="40"
-                       CornerRadius="20"
-                       BorderThickness="0"
-                       Padding="0,-4,0,0">
+                        Content="＋"
+                        Click="AddButton_Click"
+                        HorizontalAlignment="Right"
+                        Background="#0E7490"
+                        Foreground="White"
+                        FontSize="20"
+                        FontWeight="Bold"
+                        Width="40"
+                        Height="40"
+                        CornerRadius="20"
+                        BorderThickness="0"
+                        Padding="0,-4,0,0">
                     <Button.Resources>
                         <ResourceDictionary>
                             <SolidColorBrush x:Key="ButtonBackgroundPointerOver" Color="#0891B2"/>
@@ -53,24 +61,24 @@
         </ScrollViewer>
 
         <!-- Footer / Credits -->
-        <Border Grid.Row="2" 
-                Background="#2C3E50" 
-                BorderBrush="#1A252F" 
-                BorderThickness="0,1,0,0" 
+        <Border Grid.Row="2"
+                Background="#2C3E50"
+                BorderBrush="#1A252F"
+                BorderThickness="0,1,0,0"
                 Padding="8,4,8,4">
             <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="15">
                 <HyperlinkButton Content="Made by EERIE"
-                                NavigateUri="https://linktr.ee/eeriegoesd"
-                                FontSize="10"
-                                Foreground="#CCFFFFFF"
-                                Padding="0"
-                                VerticalAlignment="Center"/>
+                                 NavigateUri="https://linktr.ee/eeriegoesd"
+                                 FontSize="10"
+                                 Foreground="#CCFFFFFF"
+                                 Padding="0"
+                                 VerticalAlignment="Center"/>
                 <HyperlinkButton Content="☕ Buy Me a Coffee"
-                                NavigateUri="https://buymeacoffee.com/eeriegoesd"
-                                FontSize="10"
-                                Foreground="#CCFFFFFF"
-                                Padding="0"
-                                VerticalAlignment="Center"/>
+                                 NavigateUri="https://buymeacoffee.com/eeriegoesd"
+                                 FontSize="10"
+                                 Foreground="#CCFFFFFF"
+                                 Padding="0"
+                                 VerticalAlignment="Center"/>
             </StackPanel>
         </Border>
     </Grid>
