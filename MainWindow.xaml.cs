@@ -1,21 +1,25 @@
-// MainWindow.xaml.cs
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Windowing;
 using System;
 using System.Collections.Generic;
+using System.Collections.ObjectModel;
+using System.Linq;
 using Windows.ApplicationModel.DataTransfer;
 using Windows.Graphics;
 using Windows.Storage;
-using Windows.UI;
+using Windows.Storage.Pickers;
 
 namespace Clipora
 {
     public sealed partial class MainWindow : Window
     {
-        private readonly ApplicationDataContainer localSettings;
-        private const string SNIPPETS_KEY = "SavedSnippets";
-
+        private readonly List<Snippet> _allSnippets = new();
+        private readonly ObservableCollection<Snippet> _displayedSnippets = new();
+        private AppSettings _settings = new();
+        private string _searchText = "";
+        private string _categoryFilter = "All";
+        private string? _lastCapturedText;
         private bool _didPlaceWindow;
 
         public MainWindow()
@@ -24,11 +28,19 @@ namespace Clipora
 
             SetWindowIcon();
 
-            localSettings = ApplicationData.Current.LocalSettings;
-
             Activated += OnActivatedPlaceWindow;
 
-            LoadSnippets();
+            SnippetsList.ItemsSource = _displayedSnippets;
+
+            Load();
+
+            try
+            {
+                Clipboard.ContentChanged += OnClipboardChanged;
+            }
+            catch
+            {
+            }
         }
 
         private void SetWindowIcon()
@@ -36,7 +48,6 @@ namespace Clipora
             var hWnd = WinRT.Interop.WindowNative.GetWindowHandle(this);
             var windowId = Microsoft.UI.Win32Interop.GetWindowIdFromWindow(hWnd);
             var appWindow = AppWindow.GetFromWindowId(windowId);
-
             appWindow.SetIcon("Assets\\icon.ico");
         }
 
@@ -47,7 +58,7 @@ namespace Clipora
 
             try
             {
-                PlaceWindowOnVisibleArea(width: 400, height: 600, margin: 12);
+                PlaceWindowOnVisibleArea(width: 420, height: 640, margin: 12);
             }
             catch
             {
@@ -63,7 +74,6 @@ namespace Clipora
             var displayArea = DisplayArea.GetFromWindowId(windowId, DisplayAreaFallback.Primary);
             RectInt32 wa = displayArea.WorkArea;
 
-            // Clamp size to working area.
             int w = Math.Min(width, Math.Max(200, wa.Width - margin * 2));
             int h = Math.Min(height, Math.Max(200, wa.Height - margin * 2));
 
@@ -72,7 +82,6 @@ namespace Clipora
             int x = wa.X + wa.Width - w - margin;
             int y = wa.Y + margin;
 
-            // Clamp position.
             x = Clamp(x, wa.X + margin, wa.X + wa.Width - w - margin);
             y = Clamp(y, wa.Y + margin, wa.Y + wa.Height - h - margin);
 
@@ -82,211 +91,431 @@ namespace Clipora
         private static int Clamp(int v, int min, int max)
             => (v < min) ? min : (v > max) ? max : v;
 
-        private void LoadSnippets()
+        private void Load()
         {
-            var snippetsData = localSettings.Values[SNIPPETS_KEY] as string;
+            _settings = SnippetStorage.LoadSettings();
+            AutoCaptureToggle.IsChecked = _settings.AutoCapture;
 
-            if (!string.IsNullOrEmpty(snippetsData))
+            var snippets = SnippetStorage.LoadSnippets();
+
+            if (snippets.Count == 0)
             {
-                var snippets = snippetsData.Split(new[] { "|||" }, StringSplitOptions.RemoveEmptyEntries);
-                foreach (var snippet in snippets)
+                snippets.Add(new Snippet { Text = "Welcome to Clipora!", Order = 0 });
+                snippets.Add(new Snippet { Text = "Press Ctrl+Shift+V anywhere to open this window.", Category = "Tip", Order = 1 });
+                snippets.Add(new Snippet { Text = "Click + to add a snippet, or just copy text and it shows up here.", Category = "Tip", Order = 2 });
+                SnippetStorage.SaveSnippets(snippets);
+            }
+
+            _allSnippets.Clear();
+            _allSnippets.AddRange(snippets);
+
+            RebuildCategoryFilter();
+            ApplyFilter();
+        }
+
+        private void Save() => SnippetStorage.SaveSnippets(_allSnippets);
+
+        private void ApplyFilter()
+        {
+            _displayedSnippets.Clear();
+
+            IEnumerable<Snippet> q = _allSnippets;
+
+            if (_categoryFilter == "History")
+                q = q.Where(s => s.IsAutoCaptured || s.IsDeleted);
+            else if (_categoryFilter == "Pinned")
+                q = q.Where(s => s.IsPinned && !s.IsDeleted);
+            else if (_categoryFilter == "All")
+                q = q.Where(s => !s.IsDeleted);
+            else
+                q = q.Where(s => s.Category == _categoryFilter && !s.IsDeleted);
+
+            if (!string.IsNullOrEmpty(_searchText))
+                q = q.Where(s => s.Text.Contains(_searchText, StringComparison.OrdinalIgnoreCase));
+
+            q = q.OrderByDescending(s => s.IsPinned).ThenBy(s => s.Order);
+
+            foreach (var s in q) _displayedSnippets.Add(s);
+        }
+
+        private void RebuildCategoryFilter()
+        {
+            CategoryFilterPanel.Children.Clear();
+
+            var filters = new List<string> { "All", "Pinned", "History" };
+            foreach (var cat in _allSnippets
+                .Select(s => s.Category)
+                .Where(c => !string.IsNullOrEmpty(c))
+                .Distinct()
+                .OrderBy(c => c))
+            {
+                filters.Add(cat);
+            }
+
+            foreach (var f in filters)
+            {
+                var btn = new Button
                 {
-                    AddSnippetToUI(snippet);
-                }
+                    Content = f,
+                    Tag = f,
+                    Padding = new Thickness(10, 4, 10, 4),
+                    FontSize = 12,
+                    Foreground = new Microsoft.UI.Xaml.Media.SolidColorBrush(Windows.UI.Color.FromArgb(255, 255, 255, 255)),
+                    BorderThickness = new Thickness(0),
+                    CornerRadius = new CornerRadius(12),
+                    MinWidth = 0,
+                    MinHeight = 0
+                };
+
+                btn.Background = new Microsoft.UI.Xaml.Media.SolidColorBrush(
+                    f == _categoryFilter
+                        ? Windows.UI.Color.FromArgb(255, 99, 102, 241)
+                        : Windows.UI.Color.FromArgb(255, 24, 24, 28));
+
+                btn.Click += (s, e) =>
+                {
+                    var b = (Button)s;
+                    _categoryFilter = (string)b.Tag;
+                    RebuildCategoryFilter();
+                    ApplyFilter();
+                };
+
+                CategoryFilterPanel.Children.Add(btn);
+            }
+        }
+
+        private void SearchBox_TextChanged(object sender, TextChangedEventArgs e)
+        {
+            _searchText = SearchBox.Text ?? "";
+            ApplyFilter();
+        }
+
+        private async void OnClipboardChanged(object? sender, object e)
+        {
+            if (!_settings.AutoCapture) return;
+
+            string? text = null;
+            try
+            {
+                var content = Clipboard.GetContent();
+                if (!content.Contains(StandardDataFormats.Text)) return;
+                text = await content.GetTextAsync();
+            }
+            catch
+            {
+                return;
+            }
+
+            if (string.IsNullOrWhiteSpace(text)) return;
+            if (text == _lastCapturedText) return;
+
+            DispatcherQueue.TryEnqueue(() => AddCapturedSnippet(text));
+        }
+
+        private void AddCapturedSnippet(string text)
+        {
+            _lastCapturedText = text;
+
+            var existing = _allSnippets.FirstOrDefault(s => s.Text == text);
+            if (existing != null)
+            {
+                existing.Order = NextTopOrder();
+                Save();
+                ApplyFilter();
+                return;
+            }
+
+            var snippet = new Snippet
+            {
+                Text = text,
+                IsAutoCaptured = true,
+                Order = NextTopOrder()
+            };
+            _allSnippets.Add(snippet);
+            EnforceCap();
+            Save();
+            RebuildCategoryFilter();
+            ApplyFilter();
+        }
+
+        private int NextTopOrder()
+        {
+            var min = _allSnippets.Count == 0 ? 0 : _allSnippets.Min(s => s.Order);
+            return min - 1;
+        }
+
+        private void EnforceCap()
+        {
+            if (_settings.HistoryCap <= 0) return;
+            var captured = _allSnippets
+                .Where(s => s.IsAutoCaptured && !s.IsPinned)
+                .OrderByDescending(s => s.CreatedAt)
+                .ToList();
+
+            for (int i = _settings.HistoryCap; i < captured.Count; i++)
+            {
+                _allSnippets.Remove(captured[i]);
+            }
+        }
+
+        private void CopyButton_Click(object sender, RoutedEventArgs e)
+        {
+            if (sender is not Button btn || btn.DataContext is not Snippet s) return;
+
+            var data = new DataPackage();
+            data.SetText(s.Text);
+            Clipboard.SetContent(data);
+            _lastCapturedText = s.Text;
+
+            var original = btn.Content;
+            var originalBg = btn.Background;
+            btn.Content = "✓";
+            btn.Background = new Microsoft.UI.Xaml.Media.SolidColorBrush(
+                Windows.UI.Color.FromArgb(255, 21, 128, 61));
+
+            _ = System.Threading.Tasks.Task.Delay(900).ContinueWith(_ =>
+            {
+                DispatcherQueue.TryEnqueue(() =>
+                {
+                    btn.Content = original;
+                    btn.Background = originalBg;
+                });
+            });
+        }
+
+        private void PinButton_Click(object sender, RoutedEventArgs e)
+        {
+            if (sender is not Button btn || btn.DataContext is not Snippet s) return;
+            s.IsPinned = !s.IsPinned;
+            if (s.IsPinned) s.Order = NextTopOrder();
+            Save();
+            ApplyFilter();
+        }
+
+        private void DeleteButton_Click(object sender, RoutedEventArgs e)
+        {
+            if (sender is not Button btn || btn.DataContext is not Snippet s) return;
+
+            if (s.IsDeleted || s.IsAutoCaptured || _categoryFilter == "History")
+            {
+                _allSnippets.Remove(s);
             }
             else
             {
-                AddSnippetToUI("Welcome to Clipboard Widget!");
-                AddSnippetToUI("Click the + button to add new snippets");
-                SaveSnippets();
-            }
-        }
-
-        private void SaveSnippets()
-        {
-            var snippets = new List<string>();
-
-            foreach (var child in SnippetsPanel.Children)
-            {
-                if (child is Border border && border.Tag is string text)
-                {
-                    snippets.Add(text);
-                }
+                s.IsDeleted = true;
             }
 
-            localSettings.Values[SNIPPETS_KEY] = string.Join("|||", snippets);
+            Save();
+            RebuildCategoryFilter();
+            ApplyFilter();
         }
 
-        private void AddSnippetToUI(string text)
+        private async void EditButton_Click(object sender, RoutedEventArgs e)
         {
-            var snippetBorder = new Border
-            {
-                Background = new Microsoft.UI.Xaml.Media.SolidColorBrush(Color.FromArgb(255, 45, 45, 48)),
-                BorderBrush = new Microsoft.UI.Xaml.Media.SolidColorBrush(Color.FromArgb(255, 63, 63, 70)),
-                BorderThickness = new Thickness(1),
-                CornerRadius = new CornerRadius(8),
-                Padding = new Thickness(12),
-                Tag = text
-            };
-
-            var grid = new Grid();
-            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto }); // copy
-            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto }); // edit
-            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto }); // delete
-
-            var textBlock = new TextBlock
-            {
-                Text = text,
-                TextWrapping = TextWrapping.Wrap,
-                Foreground = new Microsoft.UI.Xaml.Media.SolidColorBrush(Color.FromArgb(255, 255, 255, 255)),
-                VerticalAlignment = VerticalAlignment.Center,
-                Margin = new Thickness(0, 0, 8, 0)
-            };
-            Grid.SetColumn(textBlock, 0);
-
-            var copyButton = new Button
-            {
-                Content = "📋",
-                FontSize = 16,
-                Width = 36,
-                Height = 36,
-                Margin = new Thickness(4, 0, 4, 0),
-                Background = new Microsoft.UI.Xaml.Media.SolidColorBrush(Color.FromArgb(255, 14, 116, 144)),
-                Foreground = new Microsoft.UI.Xaml.Media.SolidColorBrush(Color.FromArgb(255, 255, 255, 255)),
-                BorderThickness = new Thickness(0),
-                CornerRadius = new CornerRadius(6)
-            };
-            // IMPORTANT: copy the current value from Tag, not the original captured "text"
-            copyButton.Click += (s, e) =>
-                CopyToClipboard(snippetBorder.Tag as string ?? "", copyButton);
-            Grid.SetColumn(copyButton, 1);
-
-            var editButton = new Button
-            {
-                Content = "✏️",
-                FontSize = 16,
-                Width = 36,
-                Height = 36,
-                Margin = new Thickness(4, 0, 4, 0),
-                Background = new Microsoft.UI.Xaml.Media.SolidColorBrush(Color.FromArgb(255, 100, 100, 100)),
-                Foreground = new Microsoft.UI.Xaml.Media.SolidColorBrush(Color.FromArgb(255, 255, 255, 255)),
-                BorderThickness = new Thickness(0),
-                CornerRadius = new CornerRadius(6)
-            };
-            editButton.Click += (s, e) => EditSnippet(snippetBorder, textBlock);
-            Grid.SetColumn(editButton, 2);
-
-            var deleteButton = new Button
-            {
-                Content = "🗑️",
-                FontSize = 16,
-                Width = 36,
-                Height = 36,
-                Margin = new Thickness(4, 0, 4, 0),
-                Background = new Microsoft.UI.Xaml.Media.SolidColorBrush(Color.FromArgb(255, 185, 28, 28)),
-                Foreground = new Microsoft.UI.Xaml.Media.SolidColorBrush(Color.FromArgb(255, 255, 255, 255)),
-                BorderThickness = new Thickness(0),
-                CornerRadius = new CornerRadius(6)
-            };
-            deleteButton.Click += (s, e) => DeleteSnippet(snippetBorder);
-            Grid.SetColumn(deleteButton, 3);
-
-            grid.Children.Add(textBlock);
-            grid.Children.Add(copyButton);
-            grid.Children.Add(editButton);
-            grid.Children.Add(deleteButton);
-
-            snippetBorder.Child = grid;
-            SnippetsPanel.Children.Add(snippetBorder);
-        }
-        private async void CopyToClipboard(string text, Button button)
-        {
-            var dataPackage = new DataPackage();
-            dataPackage.SetText(text);
-            Clipboard.SetContent(dataPackage);
-
-            var originalContent = button.Content;
-            button.Content = "✓";
-            button.Background = new Microsoft.UI.Xaml.Media.SolidColorBrush(Color.FromArgb(255, 21, 128, 61));
-
-            await System.Threading.Tasks.Task.Delay(1000);
-
-            button.Content = originalContent;
-            button.Background = new Microsoft.UI.Xaml.Media.SolidColorBrush(Color.FromArgb(255, 14, 116, 144));
-        }
-
-        private void DeleteSnippet(Border snippet)
-        {
-            SnippetsPanel.Children.Remove(snippet);
-            SaveSnippets();
-        }
-
-        private async void EditSnippet(Border snippetBorder, TextBlock textBlock)
-        {
-            var currentText = snippetBorder.Tag as string ?? "";
-
-            var dialog = new ContentDialog
-            {
-                Title = "Edit Snippet",
-                PrimaryButtonText = "Save",
-                CloseButtonText = "Cancel",
-                DefaultButton = ContentDialogButton.Primary,
-                XamlRoot = Content.XamlRoot
-            };
-
-            var textBox = new TextBox
-            {
-                Text = currentText,
-                AcceptsReturn = true,
-                TextWrapping = TextWrapping.Wrap,
-                Height = 120,
-                Margin = new Thickness(0, 8, 0, 0)
-            };
-
-            dialog.Content = textBox;
-
-            var result = await dialog.ShowAsync();
-
-            if (result == ContentDialogResult.Primary && !string.IsNullOrWhiteSpace(textBox.Text))
-            {
-                // Update UI + stored value
-                textBlock.Text = textBox.Text;
-                snippetBorder.Tag = textBox.Text;
-
-                SaveSnippets();
-            }
+            if (sender is not Button btn || btn.DataContext is not Snippet s) return;
+            await ShowSnippetDialog(s);
         }
 
         private async void AddButton_Click(object sender, RoutedEventArgs e)
         {
+            await ShowSnippetDialog(null);
+        }
+
+        private async System.Threading.Tasks.Task ShowSnippetDialog(Snippet? existing)
+        {
+            var textBox = new TextBox
+            {
+                Text = existing?.Text ?? "",
+                PlaceholderText = "Enter text to save…",
+                AcceptsReturn = true,
+                TextWrapping = TextWrapping.Wrap,
+                MinHeight = 220,
+                MaxHeight = 420,
+                Width = 420,
+                Margin = new Thickness(0, 8, 0, 8)
+            };
+            ScrollViewer.SetVerticalScrollBarVisibility(textBox, ScrollBarVisibility.Auto);
+
+            var categoryBox = new TextBox
+            {
+                Text = existing?.Category ?? "",
+                PlaceholderText = "Category (optional, e.g. Work, Code)",
+                Width = 420,
+                Margin = new Thickness(0, 0, 0, 0)
+            };
+
+            var stack = new StackPanel { Spacing = 8, Width = 420 };
+            stack.Children.Add(textBox);
+            stack.Children.Add(categoryBox);
+
             var dialog = new ContentDialog
             {
-                Title = "Add New Snippet",
-                PrimaryButtonText = "Add",
+                Title = existing == null ? "Add Snippet" : "Edit Snippet",
+                PrimaryButtonText = existing == null ? "Add" : "Save",
                 CloseButtonText = "Cancel",
                 DefaultButton = ContentDialogButton.Primary,
+                XamlRoot = Content.XamlRoot,
+                Content = stack
+            };
+
+            var result = await dialog.ShowAsync();
+            if (result != ContentDialogResult.Primary) return;
+            if (string.IsNullOrWhiteSpace(textBox.Text)) return;
+
+            if (existing != null)
+            {
+                existing.Text = textBox.Text;
+                existing.Category = categoryBox.Text?.Trim() ?? "";
+            }
+            else
+            {
+                _allSnippets.Add(new Snippet
+                {
+                    Text = textBox.Text,
+                    Category = categoryBox.Text?.Trim() ?? "",
+                    Order = NextTopOrder()
+                });
+            }
+
+            Save();
+            RebuildCategoryFilter();
+            ApplyFilter();
+        }
+
+        private void SnippetsList_DragItemsCompleted(ListViewBase sender, DragItemsCompletedEventArgs args)
+        {
+            for (int i = 0; i < _displayedSnippets.Count; i++)
+            {
+                _displayedSnippets[i].Order = i;
+            }
+
+            var visibleIds = _displayedSnippets.Select(s => s.Id).ToHashSet();
+            int next = _displayedSnippets.Count;
+            foreach (var s in _allSnippets)
+            {
+                if (visibleIds.Contains(s.Id)) continue;
+                s.Order = next++;
+            }
+
+            Save();
+        }
+
+        private void AutoCaptureToggle_Click(object sender, RoutedEventArgs e)
+        {
+            _settings.AutoCapture = AutoCaptureToggle.IsChecked;
+            SnippetStorage.SaveSettings(_settings);
+        }
+
+        private void HistoryCap50_Click(object sender, RoutedEventArgs e) => SetCap(50);
+        private void HistoryCap100_Click(object sender, RoutedEventArgs e) => SetCap(100);
+        private void HistoryCapUnlimited_Click(object sender, RoutedEventArgs e) => SetCap(0);
+
+        private void SetCap(int cap)
+        {
+            _settings.HistoryCap = cap;
+            SnippetStorage.SaveSettings(_settings);
+            EnforceCap();
+            Save();
+            ApplyFilter();
+        }
+
+        private async void Export_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                var picker = new FileSavePicker();
+                picker.SuggestedFileName = "clipora-export";
+                picker.FileTypeChoices.Add("JSON", new List<string> { ".json" });
+
+                var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(this);
+                WinRT.Interop.InitializeWithWindow.Initialize(picker, hwnd);
+
+                var file = await picker.PickSaveFileAsync();
+                if (file == null) return;
+
+                await FileIO.WriteTextAsync(file, SnippetStorage.ExportJson(_allSnippets));
+            }
+            catch (Exception ex)
+            {
+                await ShowError("Export failed", ex.Message);
+            }
+        }
+
+        private async void Import_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                var picker = new FileOpenPicker();
+                picker.FileTypeFilter.Add(".json");
+
+                var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(this);
+                WinRT.Interop.InitializeWithWindow.Initialize(picker, hwnd);
+
+                var file = await picker.PickSingleFileAsync();
+                if (file == null) return;
+
+                var json = await FileIO.ReadTextAsync(file);
+                var imported = SnippetStorage.ImportJson(json);
+                if (imported == null)
+                {
+                    await ShowError("Import failed", "Could not parse the selected file.");
+                    return;
+                }
+
+                var existingIds = _allSnippets.Select(s => s.Id).ToHashSet();
+                var existingTexts = _allSnippets.Select(s => s.Text).ToHashSet();
+
+                int top = NextTopOrder();
+                foreach (var s in imported)
+                {
+                    if (existingIds.Contains(s.Id)) continue;
+                    if (existingTexts.Contains(s.Text)) continue;
+                    s.Order = --top;
+                    _allSnippets.Add(s);
+                }
+
+                Save();
+                RebuildCategoryFilter();
+                ApplyFilter();
+            }
+            catch (Exception ex)
+            {
+                await ShowError("Import failed", ex.Message);
+            }
+        }
+
+        private async void ClearHistory_Click(object sender, RoutedEventArgs e)
+        {
+            var dialog = new ContentDialog
+            {
+                Title = "Clear history?",
+                Content = "This removes all auto-captured snippets. Pinned and manually added snippets are kept.",
+                PrimaryButtonText = "Clear",
+                CloseButtonText = "Cancel",
+                DefaultButton = ContentDialogButton.Close,
                 XamlRoot = Content.XamlRoot
             };
 
-            var textBox = new TextBox
+            if (await dialog.ShowAsync() != ContentDialogResult.Primary) return;
+
+            var toRemove = _allSnippets.Where(s => s.IsAutoCaptured && !s.IsPinned).ToList();
+            foreach (var s in toRemove) _allSnippets.Remove(s);
+
+            Save();
+            RebuildCategoryFilter();
+            ApplyFilter();
+        }
+
+        private async System.Threading.Tasks.Task ShowError(string title, string message)
+        {
+            var dialog = new ContentDialog
             {
-                PlaceholderText = "Enter text to save...",
-                AcceptsReturn = true,
-                TextWrapping = TextWrapping.Wrap,
-                Height = 120,
-                Margin = new Thickness(0, 8, 0, 0)
+                Title = title,
+                Content = message,
+                CloseButtonText = "OK",
+                XamlRoot = Content.XamlRoot
             };
-
-            dialog.Content = textBox;
-
-            var result = await dialog.ShowAsync();
-
-            if (result == ContentDialogResult.Primary && !string.IsNullOrWhiteSpace(textBox.Text))
-            {
-                AddSnippetToUI(textBox.Text);
-                SaveSnippets();
-            }
+            await dialog.ShowAsync();
         }
     }
 }

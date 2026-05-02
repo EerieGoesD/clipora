@@ -28,14 +28,15 @@ namespace Clipora
 
             _tray = new TrayIcon(
                 hWnd,
-                tooltip: "Clipora",
+                tooltip: "Clipora (Ctrl+Shift+V)",
                 iconPath: iconPath,
                 onOpen: () => m_window?.Activate(),
                 onExit: () =>
                 {
                     m_window?.Close();
                     Environment.Exit(0);
-                }
+                },
+                onHotkey: () => m_window?.Activate()
             );
         }
     }

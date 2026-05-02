@@ -47,25 +47,39 @@ namespace Clipora
         private const uint MENU_OPEN = 1001;
         private const uint MENU_EXIT = 1002;
 
+        private const int WM_HOTKEY = 0x0312;
+        private const uint MOD_CONTROL = 0x0002;
+        private const uint MOD_SHIFT = 0x0004;
+        private const int VK_V = 0x56;
+        private const int HOTKEY_ID = 9000;
+
         private readonly IntPtr _hWnd;
         private readonly Action _onOpen;
         private readonly Action _onExit;
+        private readonly Action? _onHotkey;
 
         private IntPtr _hIcon;
         private bool _added;
+        private bool _hotkeyRegistered;
 
         private IntPtr _oldWndProc;
         private WndProcDelegate? _newWndProc;
 
         private IntPtr _hMenu;
 
-        public TrayIcon(IntPtr hWnd, string tooltip, string iconPath, Action onOpen, Action onExit)
+        public TrayIcon(IntPtr hWnd, string tooltip, string iconPath, Action onOpen, Action onExit, Action? onHotkey = null)
         {
             _hWnd = hWnd;
             _onOpen = onOpen;
             _onExit = onExit;
+            _onHotkey = onHotkey;
 
             HookWndProc();
+
+            if (_onHotkey != null)
+            {
+                _hotkeyRegistered = RegisterHotKey(_hWnd, HOTKEY_ID, MOD_CONTROL | MOD_SHIFT, VK_V);
+            }
 
             _hIcon = LoadImage(IntPtr.Zero, iconPath, IMAGE_ICON, 0, 0, LR_LOADFROMFILE | LR_DEFAULTSIZE);
             if (_hIcon == IntPtr.Zero)
@@ -128,6 +142,12 @@ namespace Clipora
 
         private IntPtr WndProc(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam)
         {
+            if ((int)msg == WM_HOTKEY && wParam.ToInt32() == HOTKEY_ID)
+            {
+                _onHotkey?.Invoke();
+                return IntPtr.Zero;
+            }
+
             if ((int)msg == WM_TRAYICON)
             {
                 int mouseMsg = lParam.ToInt32();
@@ -192,6 +212,12 @@ namespace Clipora
         {
             try
             {
+                if (_hotkeyRegistered)
+                {
+                    UnregisterHotKey(_hWnd, HOTKEY_ID);
+                    _hotkeyRegistered = false;
+                }
+
                 if (_added)
                 {
                     var nid = new NOTIFYICONDATA();
@@ -315,5 +341,11 @@ namespace Clipora
 
         [DllImport("user32.dll")]
         private static extern bool PostMessage(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam);
+
+        [DllImport("user32.dll")]
+        private static extern bool RegisterHotKey(IntPtr hWnd, int id, uint fsModifiers, int vk);
+
+        [DllImport("user32.dll")]
+        private static extern bool UnregisterHotKey(IntPtr hWnd, int id);
     }
 }
