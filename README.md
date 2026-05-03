@@ -2,6 +2,8 @@
 
 Clipboard manager and snippet widget for Windows (WinUI 3).
 
+[Download on the Microsoft Store](https://apps.microsoft.com/detail/9N37R36H262K)
+
 ## What it does
 
 - **Hotkey** - press Ctrl+Shift+V anywhere to open the window at the top-right of your screen.
