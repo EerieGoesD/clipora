@@ -49,6 +49,12 @@
       <!-- Snippet list -->
       <div class="list" id="list"></div>
 
+      <!-- Trial countdown bar (sits at the bottom) -->
+      <div id="trialBar" class="trial-bar hidden">
+        <span id="trialText">7 days left in your free trial</span>
+        <button id="trialUnlock" class="trial-unlock">Unlock</button>
+      </div>
+
       <!-- Footer -->
       <footer class="footer">
         <a href="#" class="flink" data-url="https://eeriegoesd.com" style="color:#d4d4d8">Made by EERIE</a>
@@ -80,6 +86,30 @@
           <button id="confirmCancel" class="btn btn-ghost">Cancel</button>
           <button id="confirmOk" class="btn btn-danger">Clear</button>
         </div>
+      </div>
+    </div>
+
+    <!-- Trial start / disclosure (shown on first launch, before the trial begins) -->
+    <div id="trialStartOverlay" class="overlay hidden">
+      <div class="dialog paywall">
+        <div class="paywall-icon">📋</div>
+        <div class="dialog-title">Try Clipora free for 7 days</div>
+        <div class="dialog-body">Everything is unlocked during your free trial. After 7 days, a one-time purchase of 9.99 keeps Clipora yours for good. No subscription.</div>
+        <button id="startTrialBtn" class="btn btn-primary paywall-buy">Start 7-day free trial</button>
+        <button id="startRestoreBtn" class="btn btn-ghost paywall-restore">Restore purchase</button>
+        <div id="trialStartError" class="paywall-error hidden"></div>
+      </div>
+    </div>
+
+    <!-- Paywall (shown when the trial has ended and not yet purchased) -->
+    <div id="paywallOverlay" class="overlay hidden">
+      <div class="dialog paywall">
+        <div class="paywall-icon">📋</div>
+        <div class="dialog-title" id="paywallTitle">Your free trial has ended</div>
+        <div class="dialog-body" id="paywallBody">Unlock Clipora to keep using it. One payment, yours forever.</div>
+        <button id="paywallBuy" class="btn btn-primary paywall-buy">Unlock Clipora</button>
+        <button id="paywallRestore" class="btn btn-ghost paywall-restore">Restore purchase</button>
+        <div id="paywallError" class="paywall-error hidden"></div>
       </div>
     </div>
 

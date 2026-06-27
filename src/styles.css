@@ -435,6 +435,64 @@ body {
   color: var(--text);
 }
 
+/* Trial bar */
+.trial-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  background: #1a1a20;
+  border-top: 1px solid var(--border);
+  padding: 6px 12px;
+  font-size: 12px;
+  color: var(--accent-light);
+}
+
+.trial-unlock {
+  flex: 0 0 auto;
+  border: none;
+  cursor: pointer;
+  background: var(--accent);
+  color: #fff;
+  font-family: inherit;
+  font-size: 12px;
+  padding: 4px 12px;
+  border-radius: 6px;
+}
+
+.trial-unlock:hover {
+  background: var(--accent-light);
+}
+
+/* Paywall */
+.paywall {
+  text-align: center;
+  max-width: 320px;
+}
+
+.paywall-icon {
+  font-size: 40px;
+  margin-bottom: 8px;
+}
+
+.paywall-buy {
+  width: 100%;
+  margin-top: 14px;
+  padding: 12px;
+  font-size: 14px;
+}
+
+.paywall-restore {
+  width: 100%;
+  margin-top: 8px;
+}
+
+.paywall-error {
+  color: var(--danger);
+  font-size: 12px;
+  margin-top: 10px;
+}
+
 .hidden {
   display: none !important;
 }

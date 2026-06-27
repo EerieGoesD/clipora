@@ -107,6 +107,107 @@ fn open_url(app: AppHandle, url: String) -> Result<(), String> {
         .map_err(|e| e.to_string())
 }
 
+// ----- licensing / trial + one-time unlock -----
+//
+// Two App Store in-app purchases:
+//   - TRIAL_ID  : free ($0) non-consumable. "Buying" it starts the 7-day trial,
+//                 tied to the Apple ID, so reinstalling does not reset it.
+//   - UNLOCK_ID : the paid one-time unlock.
+// On macOS the source of truth is StoreKit; license.json is just a local cache.
+
+#[allow(dead_code)]
+const UNLOCK_ID: &str = "com.eeriegoesd.clipora.unlock";
+#[allow(dead_code)]
+const TRIAL_ID: &str = "com.eeriegoesd.clipora.trial";
+
+fn license_path(app: &AppHandle) -> PathBuf {
+    data_dir(app).join("license.json")
+}
+
+// Returns (owned, trial_start_ms). trial_start_ms is 0 when the trial has not
+// been started.
+fn read_license(app: &AppHandle) -> (bool, i64) {
+    if let Ok(s) = std::fs::read_to_string(license_path(app)) {
+        if let Ok(v) = serde_json::from_str::<serde_json::Value>(&s) {
+            let owned = v.get("owned").and_then(|x| x.as_bool()).unwrap_or(false);
+            let trial = v.get("trialStartMs").and_then(|x| x.as_i64()).unwrap_or(0);
+            return (owned, trial);
+        }
+    }
+    (false, 0)
+}
+
+#[allow(dead_code)]
+fn write_license(app: &AppHandle, owned: bool, trial_start_ms: i64) {
+    let _ = std::fs::write(
+        license_path(app),
+        format!("{{\"owned\":{},\"trialStartMs\":{}}}", owned, trial_start_ms),
+    );
+}
+
+// owned = paid unlock; trialStartMs = when the free trial began (0 if not yet).
+#[tauri::command]
+async fn iap_status(app: AppHandle) -> String {
+    let (owned, trial) = read_license(&app);
+    #[cfg(target_os = "macos")]
+    {
+        // TODO(mac): refresh from StoreKit and cache:
+        //   owned = ownership of UNLOCK_ID;
+        //   trial = purchaseDate(ms) of TRIAL_ID if purchased, else 0;
+        //   then write_license(&app, owned, trial).
+        // Finalized/tested on the Mac (StoreKit cannot run on Windows).
+    }
+    format!("{{\"owned\":{},\"trialStartMs\":{}}}", owned, trial)
+}
+
+// Starts the free trial by "buying" the $0 TRIAL_ID. Returns the trial start
+// time in ms.
+#[tauri::command]
+async fn iap_start_trial(app: AppHandle) -> Result<i64, String> {
+    let _ = &app;
+    #[cfg(target_os = "macos")]
+    {
+        // TODO(mac): purchase the free TRIAL_ID; read its purchaseDate(ms);
+        // write_license(&app, current_owned, date); return Ok(date).
+        return Err("store_unavailable".into());
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        Err("Purchases are only available in the Mac App Store build.".into())
+    }
+}
+
+// Buys the paid one-time unlock (UNLOCK_ID).
+#[tauri::command]
+async fn iap_buy(app: AppHandle) -> Result<bool, String> {
+    let _ = &app;
+    #[cfg(target_os = "macos")]
+    {
+        // TODO(mac): purchase UNLOCK_ID; on success write_license(owned=true, trial)
+        // and return Ok(true). Finalized/tested on the Mac.
+        return Err("store_unavailable".into());
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        Err("Purchases are only available in the Mac App Store build.".into())
+    }
+}
+
+// Restores previous purchases (unlock and/or trial) for this Apple ID.
+#[tauri::command]
+async fn iap_restore(app: AppHandle) -> Result<(), String> {
+    let _ = &app;
+    #[cfg(target_os = "macos")]
+    {
+        // TODO(mac): restore; refresh owned + trial from StoreKit and write_license.
+        return Err("store_unavailable".into());
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        Err("Purchases are only available in the Mac App Store build.".into())
+    }
+}
+
 // Shows, restores and focuses the main window, placing it at the top-right.
 fn show_main_window(app: &AppHandle) {
     if let Some(win) = app.get_webview_window("main") {
@@ -146,6 +247,11 @@ pub fn run() {
         }));
     }
 
+    #[cfg(target_os = "macos")]
+    {
+        builder = builder.plugin(tauri_plugin_iap::init());
+    }
+
     builder
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_clipboard_manager::init())
@@ -171,7 +277,11 @@ pub fn run() {
             copy_to_clipboard,
             export_to_file,
             import_from_file,
-            open_url
+            open_url,
+            iap_status,
+            iap_start_trial,
+            iap_buy,
+            iap_restore
         ])
         .setup(|app| {
             let handle = app.handle().clone();

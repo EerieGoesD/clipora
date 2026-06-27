@@ -12,6 +12,13 @@ let dragSrcId = null;
 const isMac = navigator.userAgent.toLowerCase().includes("mac");
 const hotkeyLabel = () => (isMac ? "Cmd+Shift+V" : "Ctrl+Shift+V");
 
+// Licensing / trial
+const TRIAL_DAYS = 7;
+const UNLOCK_PRICE_TEXT = "9.99";
+let owned = false;
+let trialActive = false;
+let hasAccess = true;
+
 function uuid() {
   if (window.crypto && crypto.randomUUID) return crypto.randomUUID();
   return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (c) => {
@@ -78,6 +85,8 @@ async function load() {
   updateMenuState();
   rebuildCategoryFilter();
   applyFilter();
+
+  await initLicensing();
 }
 
 // ----- ordering / cap -----
@@ -472,6 +481,166 @@ function updateMenuState() {
   });
 }
 
+// ----- licensing / trial -----
+let trialStartMs = 0;
+let needsTrialStart = false;
+
+// For previewing the screens on non-store builds: set localStorage
+// "clipora_dev_license" to "start", "trial", or "expired".
+function devLicenseMode() {
+  return localStorage.getItem("clipora_dev_license");
+}
+
+async function initLicensing() {
+  const dev = devLicenseMode();
+  const storeBuild = isMac || !!dev;
+
+  // Non-store builds (e.g. Windows dev) stay fully open; Windows monetization is
+  // handled separately by the Microsoft Store.
+  if (!storeBuild) {
+    owned = true;
+    hasAccess = true;
+    needsTrialStart = false;
+    updateLicenseUI(0);
+    return;
+  }
+
+  if (dev) {
+    owned = false;
+    if (dev === "start") trialStartMs = 0;
+    else if (dev === "trial") trialStartMs = Date.now() - 2 * 86400000;
+    else trialStartMs = Date.now() - 8 * 86400000; // expired
+    computeAccessAndUI();
+    return;
+  }
+
+  try {
+    const status = JSON.parse(await invoke("iap_status"));
+    owned = !!status.owned;
+    trialStartMs = Number(status.trialStartMs) || 0;
+  } catch {
+    owned = false;
+    trialStartMs = 0;
+  }
+  computeAccessAndUI();
+}
+
+function computeAccessAndUI() {
+  if (owned) {
+    hasAccess = true;
+    trialActive = false;
+    needsTrialStart = false;
+    updateLicenseUI(0);
+    return;
+  }
+  if (trialStartMs > 0) {
+    const msLeft = trialStartMs + TRIAL_DAYS * 86400000 - Date.now();
+    trialActive = msLeft > 0;
+    needsTrialStart = false;
+    hasAccess = trialActive;
+    updateLicenseUI(Math.max(0, Math.ceil(msLeft / 86400000)));
+    return;
+  }
+  // No trial started yet, not owned.
+  trialActive = false;
+  needsTrialStart = true;
+  hasAccess = false;
+  updateLicenseUI(0);
+}
+
+function updateLicenseUI(daysLeft) {
+  const startOverlay = document.getElementById("trialStartOverlay");
+  const paywall = document.getElementById("paywallOverlay");
+  const bar = document.getElementById("trialBar");
+  const buyBtn = document.getElementById("paywallBuy");
+
+  if (buyBtn) buyBtn.textContent = "Unlock Clipora - " + UNLOCK_PRICE_TEXT;
+
+  // First-launch disclosure / start-trial screen.
+  startOverlay.classList.toggle("hidden", !needsTrialStart);
+
+  // Paywall only when the trial has ended and the app is not purchased.
+  paywall.classList.toggle("hidden", !(!hasAccess && !needsTrialStart));
+
+  // Bottom countdown bar while trialing.
+  if (!owned && trialActive) {
+    document.getElementById("trialText").textContent =
+      daysLeft === 1 ? "1 day left in your free trial" : daysLeft + " days left in your free trial";
+    bar.classList.remove("hidden");
+  } else {
+    bar.classList.add("hidden");
+  }
+}
+
+async function startTrial() {
+  hideLicenseError();
+  if (devLicenseMode()) {
+    trialStartMs = Date.now();
+    computeAccessAndUI();
+    return;
+  }
+  try {
+    const ms = await invoke("iap_start_trial");
+    trialStartMs = Number(ms) || Date.now();
+    computeAccessAndUI();
+  } catch (e) {
+    showLicenseError(friendlyStoreError(e));
+  }
+}
+
+async function buyUnlock() {
+  hideLicenseError();
+  try {
+    const ok = await invoke("iap_buy");
+    if (ok) {
+      owned = true;
+      computeAccessAndUI();
+    }
+  } catch (e) {
+    showLicenseError(friendlyStoreError(e));
+  }
+}
+
+async function restoreUnlock() {
+  hideLicenseError();
+  try {
+    await invoke("iap_restore");
+    const status = JSON.parse(await invoke("iap_status"));
+    owned = !!status.owned;
+    trialStartMs = Number(status.trialStartMs) || 0;
+    if (!owned && trialStartMs === 0) {
+      showLicenseError("No previous purchase was found for this Apple ID.");
+    }
+    computeAccessAndUI();
+  } catch (e) {
+    showLicenseError(friendlyStoreError(e));
+  }
+}
+
+function friendlyStoreError(e) {
+  const msg = String(e || "");
+  if (msg.includes("store_unavailable")) return "The store is not reachable right now. Please try again.";
+  if (msg.toLowerCase().includes("mac app store build")) return msg;
+  return "Something went wrong with the store. Please try again.";
+}
+
+function showLicenseError(msg) {
+  for (const id of ["paywallError", "trialStartError"]) {
+    const el = document.getElementById(id);
+    if (el) {
+      el.textContent = msg;
+      el.classList.remove("hidden");
+    }
+  }
+}
+
+function hideLicenseError() {
+  for (const id of ["paywallError", "trialStartError"]) {
+    const el = document.getElementById(id);
+    if (el) el.classList.add("hidden");
+  }
+}
+
 // ----- wiring -----
 function wire() {
   document.getElementById("hotkeyHint").textContent = hotkeyLabel() + " to open";
@@ -507,6 +676,12 @@ function wire() {
   };
 
   document.getElementById("addButton").onclick = () => addSnippet();
+
+  document.getElementById("startTrialBtn").onclick = () => startTrial();
+  document.getElementById("startRestoreBtn").onclick = () => restoreUnlock();
+  document.getElementById("paywallBuy").onclick = () => buyUnlock();
+  document.getElementById("paywallRestore").onclick = () => restoreUnlock();
+  document.getElementById("trialUnlock").onclick = () => buyUnlock();
   document.getElementById("searchBox").addEventListener("input", (e) => {
     searchText = e.target.value || "";
     applyFilter();

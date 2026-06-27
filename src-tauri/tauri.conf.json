@@ -38,7 +38,7 @@
     ],
     "macOS": {
       "entitlements": "Entitlements.plist",
-      "minimumSystemVersion": "10.15",
+      "minimumSystemVersion": "13.0",
       "files": {
         "embedded.provisionprofile": "embedded.provisionprofile"
       }

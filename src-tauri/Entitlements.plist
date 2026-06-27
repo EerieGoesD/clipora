@@ -8,6 +8,9 @@
   <!-- Lets Import/Export read and write the file the user picks in the dialog. -->
   <key>com.apple.security.files.user-selected.read-write</key>
   <true/>
+  <!-- StoreKit (in-app purchase) needs outbound network access. -->
+  <key>com.apple.security.network.client</key>
+  <true/>
   <!-- App Store identity (Team ID R8G3Q53T4G). -->
   <key>com.apple.application-identifier</key>
   <string>R8G3Q53T4G.com.eeriegoesd.clipora</string>
