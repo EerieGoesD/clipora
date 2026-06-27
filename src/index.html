@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Clipora</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div id="app">
+      <!-- Header -->
+      <header class="header">
+        <div class="brand">
+          <div class="brand-title">📋 Clipora</div>
+          <div class="brand-sub" id="hotkeyHint">Ctrl+Shift+V to open</div>
+        </div>
+        <div class="header-actions">
+          <button id="menuButton" class="icon-btn menu-btn" title="Menu">⋯</button>
+          <button id="addButton" class="icon-btn add-btn" title="Add snippet">＋</button>
+        </div>
+
+        <!-- Dropdown menu -->
+        <div id="menu" class="menu hidden">
+          <button class="menu-item" id="menuAutoCapture">
+            <span class="menu-check" id="autoCaptureCheck">✓</span>
+            <span>Auto-capture clipboard</span>
+          </button>
+          <div class="menu-sep"></div>
+          <div class="menu-label">History cap</div>
+          <button class="menu-item cap-item" data-cap="50"><span class="menu-check">•</span><span>50</span></button>
+          <button class="menu-item cap-item" data-cap="100"><span class="menu-check">•</span><span>100</span></button>
+          <button class="menu-item cap-item" data-cap="0"><span class="menu-check">•</span><span>Unlimited</span></button>
+          <div class="menu-sep"></div>
+          <button class="menu-item" id="menuImport"><span class="menu-check"></span><span>Import…</span></button>
+          <button class="menu-item" id="menuExport"><span class="menu-check"></span><span>Export…</span></button>
+          <div class="menu-sep"></div>
+          <button class="menu-item danger" id="menuClear"><span class="menu-check"></span><span>Clear history</span></button>
+        </div>
+      </header>
+
+      <!-- Search -->
+      <div class="search-bar">
+        <input id="searchBox" type="text" placeholder="Search snippets…" autocomplete="off" />
+      </div>
+
+      <!-- Category filters -->
+      <div class="filters" id="filters"></div>
+
+      <!-- Snippet list -->
+      <div class="list" id="list"></div>
+
+      <!-- Footer -->
+      <footer class="footer">
+        <a href="#" class="flink" data-url="https://eeriegoesd.com" style="color:#d4d4d8">Made by EERIE</a>
+        <a href="#" class="flink" data-url="https://github.com/EerieGoesD/clipora/issues/new" style="color:#ef4444">Report Issue</a>
+        <a href="#" class="flink" data-url="https://github.com/EerieGoesD/clipora/discussions/new?category=ideas" style="color:#22c55e">Suggest Feature</a>
+        <a href="#" class="flink" data-url="https://buymeacoffee.com/eeriegoesd" style="color:#facc15">☕ Support</a>
+      </footer>
+    </div>
+
+    <!-- Snippet dialog -->
+    <div id="dialogOverlay" class="overlay hidden">
+      <div class="dialog">
+        <div class="dialog-title" id="dialogTitle">Add Snippet</div>
+        <textarea id="dialogText" class="dialog-text" placeholder="Enter text to save…"></textarea>
+        <input id="dialogCategory" class="dialog-input" type="text" placeholder="Category (optional, e.g. Work, Code)" />
+        <div class="dialog-actions">
+          <button id="dialogCancel" class="btn btn-ghost">Cancel</button>
+          <button id="dialogConfirm" class="btn btn-primary">Add</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Confirm dialog -->
+    <div id="confirmOverlay" class="overlay hidden">
+      <div class="dialog">
+        <div class="dialog-title" id="confirmTitle">Clear history?</div>
+        <div class="dialog-body" id="confirmBody"></div>
+        <div class="dialog-actions">
+          <button id="confirmCancel" class="btn btn-ghost">Cancel</button>
+          <button id="confirmOk" class="btn btn-danger">Clear</button>
+        </div>
+      </div>
+    </div>
+
+    <script src="main.js"></script>
+  </body>
+</html>
