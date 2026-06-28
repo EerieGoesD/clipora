@@ -210,7 +210,7 @@ async fn iap_price(app: AppHandle) -> String {
             .await
         {
             if let Some(p) = resp.products.first() {
-                return p.formatted_price.clone();
+                return p.formatted_price.clone().unwrap_or_default();
             }
         }
         return String::new();
