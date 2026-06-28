@@ -507,7 +507,7 @@ async function initLicensing() {
 
   if (dev) {
     owned = false;
-    unlockPrice = "9,99 EUR"; // sample for previewing the UI only
+    unlockPrice = "9,99 €"; // sample for previewing the UI only (real price comes from the store)
     if (dev === "start") trialStartMs = 0;
     else if (dev === "trial") trialStartMs = Date.now() - 2 * 86400000;
     else trialStartMs = Date.now() - 8 * 86400000; // expired
