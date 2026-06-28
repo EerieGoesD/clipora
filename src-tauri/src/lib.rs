@@ -151,67 +151,143 @@ fn write_license(app: &AppHandle, owned: bool, trial_start_ms: i64) {
     );
 }
 
+// Current time in ms since the Unix epoch (fallback for the trial start time).
+#[allow(dead_code)]
+fn now_ms() -> i64 {
+    use std::time::{SystemTime, UNIX_EPOCH};
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_millis() as i64)
+        .unwrap_or(0)
+}
+
 // owned = paid unlock; trialStartMs = when the free trial began (0 if not yet).
+// On macOS this refreshes from StoreKit (the source of truth) and caches it.
 #[tauri::command]
 async fn iap_status(app: AppHandle) -> String {
-    let (owned, trial) = read_license(&app);
     #[cfg(target_os = "macos")]
     {
-        // TODO(mac): refresh from StoreKit and cache:
-        //   owned = ownership of UNLOCK_ID;
-        //   trial = purchaseDate(ms) of TRIAL_ID if purchased, else 0;
-        //   then write_license(&app, owned, trial).
-        // Finalized/tested on the Mac (StoreKit cannot run on Windows).
+        use tauri_plugin_iap::IapExt;
+        let (mut owned, mut trial) = read_license(&app);
+        if let Ok(st) = app
+            .iap()
+            .get_product_status(UNLOCK_ID.to_string(), "inapp".to_string())
+            .await
+        {
+            owned = st.is_owned;
+        }
+        if let Ok(st) = app
+            .iap()
+            .get_product_status(TRIAL_ID.to_string(), "inapp".to_string())
+            .await
+        {
+            if st.is_owned {
+                if let Some(pt) = st.purchase_time {
+                    trial = pt;
+                }
+            }
+        }
+        write_license(&app, owned, trial);
+        return format!("{{\"owned\":{},\"trialStartMs\":{}}}", owned, trial);
     }
-    format!("{{\"owned\":{},\"trialStartMs\":{}}}", owned, trial)
+    #[cfg(not(target_os = "macos"))]
+    {
+        let (owned, trial) = read_license(&app);
+        format!("{{\"owned\":{},\"trialStartMs\":{}}}", owned, trial)
+    }
 }
 
 // Localized App Store price of the unlock (e.g. "9,99 EUR"). Empty if unknown.
 // Never hardcode a price; the store returns the right currency/amount per region.
 #[tauri::command]
 async fn iap_price(app: AppHandle) -> String {
-    let _ = &app;
     #[cfg(target_os = "macos")]
     {
-        // TODO(mac): query tauri-plugin-iap for UNLOCK_ID and return its localized
-        // display price string. Finalized/tested on the Mac.
+        use tauri_plugin_iap::IapExt;
+        if let Ok(resp) = app
+            .iap()
+            .get_products(vec![UNLOCK_ID.to_string()], "inapp".to_string())
+            .await
+        {
+            if let Some(p) = resp.products.first() {
+                return p.formatted_price.clone();
+            }
+        }
         return String::new();
     }
     #[cfg(not(target_os = "macos"))]
     {
+        let _ = &app;
         String::new()
     }
 }
 
-// Starts the free trial by "buying" the $0 TRIAL_ID. Returns the trial start
-// time in ms.
+// Starts the free trial by "buying" the $0 TRIAL_ID. Returns the trial start (ms).
 #[tauri::command]
 async fn iap_start_trial(app: AppHandle) -> Result<i64, String> {
-    let _ = &app;
     #[cfg(target_os = "macos")]
     {
-        // TODO(mac): purchase the free TRIAL_ID; read its purchaseDate(ms);
-        // write_license(&app, current_owned, date); return Ok(date).
-        return Err("store_unavailable".into());
+        use tauri_plugin_iap::{IapExt, PurchaseRequest};
+        app.iap()
+            .purchase(PurchaseRequest {
+                product_id: TRIAL_ID.to_string(),
+                product_type: "inapp".to_string(),
+                options: None,
+            })
+            .await
+            .map_err(|e| e.to_string())?;
+        let mut start = now_ms();
+        if let Ok(st) = app
+            .iap()
+            .get_product_status(TRIAL_ID.to_string(), "inapp".to_string())
+            .await
+        {
+            if let Some(pt) = st.purchase_time {
+                start = pt;
+            }
+        }
+        let owned = read_license(&app).0;
+        write_license(&app, owned, start);
+        return Ok(start);
     }
     #[cfg(not(target_os = "macos"))]
     {
+        let _ = &app;
         Err("Purchases are only available in the Mac App Store build.".into())
     }
 }
 
-// Buys the paid one-time unlock (UNLOCK_ID).
+// Buys the paid one-time unlock (UNLOCK_ID). Returns true if owned afterward.
 #[tauri::command]
 async fn iap_buy(app: AppHandle) -> Result<bool, String> {
-    let _ = &app;
     #[cfg(target_os = "macos")]
     {
-        // TODO(mac): purchase UNLOCK_ID; on success write_license(owned=true, trial)
-        // and return Ok(true). Finalized/tested on the Mac.
-        return Err("store_unavailable".into());
+        use tauri_plugin_iap::{IapExt, PurchaseRequest};
+        app.iap()
+            .purchase(PurchaseRequest {
+                product_id: UNLOCK_ID.to_string(),
+                product_type: "inapp".to_string(),
+                options: None,
+            })
+            .await
+            .map_err(|e| e.to_string())?;
+        let mut owned = false;
+        if let Ok(st) = app
+            .iap()
+            .get_product_status(UNLOCK_ID.to_string(), "inapp".to_string())
+            .await
+        {
+            owned = st.is_owned;
+        }
+        if owned {
+            let trial = read_license(&app).1;
+            write_license(&app, true, trial);
+        }
+        return Ok(owned);
     }
     #[cfg(not(target_os = "macos"))]
     {
+        let _ = &app;
         Err("Purchases are only available in the Mac App Store build.".into())
     }
 }
@@ -219,14 +295,39 @@ async fn iap_buy(app: AppHandle) -> Result<bool, String> {
 // Restores previous purchases (unlock and/or trial) for this Apple ID.
 #[tauri::command]
 async fn iap_restore(app: AppHandle) -> Result<(), String> {
-    let _ = &app;
     #[cfg(target_os = "macos")]
     {
-        // TODO(mac): restore; refresh owned + trial from StoreKit and write_license.
-        return Err("store_unavailable".into());
+        use tauri_plugin_iap::IapExt;
+        app.iap()
+            .restore_purchases("inapp".to_string())
+            .await
+            .map_err(|e| e.to_string())?;
+        let mut owned = false;
+        if let Ok(st) = app
+            .iap()
+            .get_product_status(UNLOCK_ID.to_string(), "inapp".to_string())
+            .await
+        {
+            owned = st.is_owned;
+        }
+        let mut trial = 0i64;
+        if let Ok(st) = app
+            .iap()
+            .get_product_status(TRIAL_ID.to_string(), "inapp".to_string())
+            .await
+        {
+            if st.is_owned {
+                if let Some(pt) = st.purchase_time {
+                    trial = pt;
+                }
+            }
+        }
+        write_license(&app, owned, trial);
+        return Ok(());
     }
     #[cfg(not(target_os = "macos"))]
     {
+        let _ = &app;
         Err("Purchases are only available in the Mac App Store build.".into())
     }
 }
