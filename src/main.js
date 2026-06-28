@@ -14,10 +14,10 @@ const hotkeyLabel = () => (isMac ? "Cmd+Shift+V" : "Ctrl+Shift+V");
 
 // Licensing / trial
 const TRIAL_DAYS = 7;
-const UNLOCK_PRICE_TEXT = "9.99";
 let owned = false;
 let trialActive = false;
 let hasAccess = true;
+let unlockPrice = ""; // localized App Store price (e.g. "9,99 EUR"); empty until fetched
 
 function uuid() {
   if (window.crypto && crypto.randomUUID) return crypto.randomUUID();
@@ -507,6 +507,7 @@ async function initLicensing() {
 
   if (dev) {
     owned = false;
+    unlockPrice = "9,99 EUR"; // sample for previewing the UI only
     if (dev === "start") trialStartMs = 0;
     else if (dev === "trial") trialStartMs = Date.now() - 2 * 86400000;
     else trialStartMs = Date.now() - 8 * 86400000; // expired
@@ -521,6 +522,11 @@ async function initLicensing() {
   } catch {
     owned = false;
     trialStartMs = 0;
+  }
+  try {
+    unlockPrice = await invoke("iap_price"); // localized price from the App Store
+  } catch {
+    unlockPrice = "";
   }
   computeAccessAndUI();
 }
@@ -554,7 +560,9 @@ function updateLicenseUI(daysLeft) {
   const bar = document.getElementById("trialBar");
   const buyBtn = document.getElementById("paywallBuy");
 
-  if (buyBtn) buyBtn.textContent = "Unlock Clipora - " + UNLOCK_PRICE_TEXT;
+  if (buyBtn) buyBtn.textContent = unlockPrice ? "Unlock Clipora - " + unlockPrice : "Unlock Clipora";
+  const disc = document.getElementById("disclosurePrice");
+  if (disc) disc.textContent = unlockPrice ? "of " + unlockPrice + " " : "";
 
   // First-launch disclosure / start-trial screen.
   startOverlay.classList.toggle("hidden", !needsTrialStart);
@@ -693,6 +701,13 @@ function wire() {
       invoke("open_url", { url: a.dataset.url });
     };
   });
+
+  invoke("app_version")
+    .then((v) => {
+      const el = document.getElementById("appVersion");
+      if (el) el.textContent = "v" + v;
+    })
+    .catch(() => {});
 
   document.addEventListener("keydown", (e) => {
     if (e.key === "Escape") {

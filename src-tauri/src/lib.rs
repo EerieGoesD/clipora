@@ -107,6 +107,12 @@ fn open_url(app: AppHandle, url: String) -> Result<(), String> {
         .map_err(|e| e.to_string())
 }
 
+// The app version (from tauri.conf.json), shown in the footer.
+#[tauri::command]
+fn app_version(app: AppHandle) -> String {
+    app.package_info().version.to_string()
+}
+
 // ----- licensing / trial + one-time unlock -----
 //
 // Two App Store in-app purchases:
@@ -158,6 +164,23 @@ async fn iap_status(app: AppHandle) -> String {
         // Finalized/tested on the Mac (StoreKit cannot run on Windows).
     }
     format!("{{\"owned\":{},\"trialStartMs\":{}}}", owned, trial)
+}
+
+// Localized App Store price of the unlock (e.g. "9,99 EUR"). Empty if unknown.
+// Never hardcode a price; the store returns the right currency/amount per region.
+#[tauri::command]
+async fn iap_price(app: AppHandle) -> String {
+    let _ = &app;
+    #[cfg(target_os = "macos")]
+    {
+        // TODO(mac): query tauri-plugin-iap for UNLOCK_ID and return its localized
+        // display price string. Finalized/tested on the Mac.
+        return String::new();
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        String::new()
+    }
 }
 
 // Starts the free trial by "buying" the $0 TRIAL_ID. Returns the trial start
@@ -278,7 +301,9 @@ pub fn run() {
             export_to_file,
             import_from_file,
             open_url,
+            app_version,
             iap_status,
+            iap_price,
             iap_start_trial,
             iap_buy,
             iap_restore

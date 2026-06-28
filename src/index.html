@@ -57,10 +57,13 @@
 
       <!-- Footer -->
       <footer class="footer">
-        <a href="#" class="flink" data-url="https://eeriegoesd.com" style="color:#d4d4d8">Made by EERIE</a>
-        <a href="#" class="flink" data-url="https://github.com/EerieGoesD/clipora/issues/new" style="color:#ef4444">Report Issue</a>
-        <a href="#" class="flink" data-url="https://github.com/EerieGoesD/clipora/discussions/new?category=ideas" style="color:#22c55e">Suggest Feature</a>
-        <a href="#" class="flink" data-url="https://buymeacoffee.com/eeriegoesd" style="color:#facc15">☕ Support</a>
+        <span id="appVersion" class="app-version"></span>
+        <div class="footer-links">
+          <a href="#" class="flink" data-url="https://eeriegoesd.com" style="color:#d4d4d8">Made by EERIE</a>
+          <a href="#" class="flink" data-url="https://github.com/EerieGoesD/clipora/issues/new" style="color:#ef4444">Report Issue</a>
+          <a href="#" class="flink" data-url="https://github.com/EerieGoesD/clipora/discussions/new?category=ideas" style="color:#22c55e">Suggest Feature</a>
+          <a href="#" class="flink" data-url="https://buymeacoffee.com/eeriegoesd" style="color:#facc15">☕ Support</a>
+        </div>
       </footer>
     </div>
 
@@ -94,7 +97,7 @@
       <div class="dialog paywall">
         <div class="paywall-icon">📋</div>
         <div class="dialog-title">Try Clipora free for 7 days</div>
-        <div class="dialog-body">Everything is unlocked during your free trial. After 7 days, a one-time purchase of 9.99 keeps Clipora yours for good. No subscription.</div>
+        <div class="dialog-body">Everything is unlocked during your free trial. After 7 days, a one-time purchase <span id="disclosurePrice"></span>keeps Clipora yours for good. No subscription.</div>
         <button id="startTrialBtn" class="btn btn-primary paywall-buy">Start 7-day free trial</button>
         <button id="startRestoreBtn" class="btn btn-ghost paywall-restore">Restore purchase</button>
         <div id="trialStartError" class="paywall-error hidden"></div>
